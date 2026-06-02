@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Snip — URL Shortener</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:       #0a0a0f;
+    --surface:  #13131a;
+    --border:   #1e1e2e;
+    --accent:   #7fff6a;
+    --accent2:  #6af7ff;
+    --text:     #e8e8f0;
+    --muted:    #5a5a72;
+    --error:    #ff6a6a;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  /* ── grid bg ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: .4;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── glow blobs ── */
+  .blob {
+    position: fixed; border-radius: 50%; filter: blur(120px);
+    pointer-events: none; z-index: 0; opacity: .18;
+  }
+  .blob-1 { width: 500px; height: 500px; background: var(--accent);  top: -150px; left: -100px; }
+  .blob-2 { width: 400px; height: 400px; background: var(--accent2); bottom: -100px; right: -80px; }
+
+  /* ── layout ── */
+  header {
+    position: relative; z-index: 1;
+    padding: 28px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-size: 1.5rem; font-weight: 800; letter-spacing: -1px;
+    color: var(--accent);
+  }
+  .logo span { color: var(--text); }
+
+  nav a {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .78rem; color: var(--muted);
+    text-decoration: none; margin-left: 32px;
+    transition: color .2s;
+  }
+  nav a:hover { color: var(--accent); }
+
+  main {
+    position: relative; z-index: 1;
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 80px 24px 60px;
+  }
+
+  .hero-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .7rem; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--accent); border: 1px solid var(--accent);
+    padding: 4px 12px; border-radius: 2px; margin-bottom: 24px;
+    opacity: 0; animation: fadeUp .5s .1s forwards;
+  }
+
+  h1 {
+    font-size: clamp(2.4rem, 6vw, 4.2rem);
+    font-weight: 800; letter-spacing: -2px; text-align: center;
+    line-height: 1.05; margin-bottom: 16px;
+    opacity: 0; animation: fadeUp .5s .2s forwards;
+  }
+  h1 em { font-style: normal; color: var(--accent); }
+
+  .subtitle {
+    font-size: 1rem; color: var(--muted); text-align: center;
+    max-width: 480px; line-height: 1.6; margin-bottom: 52px;
+    opacity: 0; animation: fadeUp .5s .3s forwards;
+  }
+
+  /* ── card ── */
+  .card {
+    width: 100%; max-width: 620px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 32px;
+    opacity: 0; animation: fadeUp .5s .4s forwards;
+  }
+
+  .input-row {
+    display: flex; gap: 10px;
+  }
+  .url-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .85rem; color: var(--text);
+    outline: none; transition: border-color .2s;
+  }
+  .url-input::placeholder { color: var(--muted); }
+  .url-input:focus { border-color: var(--accent); }
+
+  .btn-shorten {
+    background: var(--accent);
+    color: #0a0a0f;
+    border: none; border-radius: 8px;
+    padding: 14px 28px;
+    font-family: 'Syne', sans-serif;
+    font-size: .9rem; font-weight: 700;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    white-space: nowrap;
+  }
+  .btn-shorten:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(127,255,106,.25); }
+  .btn-shorten:active { transform: translateY(0); }
+  .btn-shorten:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  /* ── result ── */
+  .result {
+    margin-top: 20px;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px 20px;
+    display: none; flex-direction: column; gap: 10px;
+  }
+  .result.visible { display: flex; animation: fadeUp .3s forwards; }
+
+  .result-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .68rem; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .result-link-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .short-link {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.05rem; font-weight: 500;
+    color: var(--text); text-decoration: none; flex: 1;
+    word-break: break-all;
+  }
+  .short-link:hover { color: var(--accent); }
+
+  .btn-copy {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .75rem; color: var(--muted);
+    cursor: pointer; transition: all .2s; white-space: nowrap;
+  }
+  .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-copy.copied { border-color: var(--accent); color: var(--accent); }
+
+  .result-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .72rem; color: var(--muted);
+    display: flex; gap: 20px; flex-wrap: wrap;
+  }
+  .result-meta span { color: var(--text); }
+
+  .error-msg {
+    margin-top: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .8rem; color: var(--error);
+    display: none;
+  }
+  .error-msg.visible { display: block; }
+
+  /* ── stats section ── */
+  .stats-section {
+    width: 100%; max-width: 620px; margin-top: 48px;
+    opacity: 0; animation: fadeUp .5s .55s forwards;
+  }
+  .stats-header {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .7rem; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .stats-header::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  .recent-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .recent-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    display: flex; align-items: center; gap: 14px;
+    transition: border-color .2s;
+  }
+  .recent-item:hover { border-color: var(--muted); }
+
+  .recent-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .85rem; font-weight: 500; color: var(--accent);
+    min-width: 60px;
+  }
+  .recent-url {
+    flex: 1; font-size: .82rem; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .recent-clicks {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .75rem; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 8px;
+    white-space: nowrap;
+  }
+
+  .empty-state {
+    text-align: center; padding: 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .8rem; color: var(--muted);
+  }
+
+  /* ── footer ── */
+  footer {
+    position: relative; z-index: 1;
+    text-align: center; padding: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .7rem; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── responsive ── */
+  @media (max-width: 520px) {
+    header { padding: 20px 24px; }
+    .input-row { flex-direction: column; }
+    .btn-shorten { width: 100%; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+
+<header>
+  <div class="logo">snip<span>.</span></div>
+  <nav>
+    <a href="/">Home</a>
+    <a href="#recent">Recent</a>
+  </nav>
+</header>
+
+<main>
+  <div class="hero-tag">URL Shortener</div>
+  <h1>Make long links<br><em>short & sharp.</em></h1>
+  <p class="subtitle">Paste any URL and get a clean, trackable short link instantly. Sub-100 ms redirects, click analytics included.</p>
+
+  <div class="card">
+    <div class="input-row">
+      <input id="urlInput" class="url-input" type="text"
+             placeholder="https://your-very-long-url.com/goes/here" />
+      <button id="shortenBtn" class="btn-shorten" onclick="shortenUrl()">Shorten →</button>
+    </div>
+    <div id="errorMsg" class="error-msg"></div>
+    <div id="result" class="result">
+      <div class="result-label">Your short link</div>
+      <div class="result-link-row">
+        <a id="shortLink" class="short-link" href="#" target="_blank"></a>
+        <button id="copyBtn" class="btn-copy" onclick="copyLink()">Copy</button>
+      </div>
+      <div class="result-meta">
+        ID: <span id="shortId">—</span> &nbsp;·&nbsp;
+        Created: <span id="createdAt">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent links -->
+  <div class="stats-section" id="recent">
+    <div class="stats-header">Recent links</div>
+    <div id="recentList" class="recent-list">
+      <div class="empty-state">No links yet. Shorten your first URL above!</div>
+    </div>
+  </div>
+</main>
+
+<footer>© 2025 Snip — built with Python · Flask · SQLite</footer>
+
+<script>
+  let currentShortUrl = '';
+
+  async function shortenUrl() {
+    const input   = document.getElementById('urlInput');
+    const btn     = document.getElementById('shortenBtn');
+    const result  = document.getElementById('result');
+    const errMsg  = document.getElementById('errorMsg');
+    const url     = input.value.trim();
+
+    if (!url) { showError('Please enter a URL.'); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Shortening…';
+    errMsg.classList.remove('visible');
+    result.classList.remove('visible');
+
+    try {
+      const res  = await fetch('/shorten', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+
+      if (!res.ok) { showError(data.error || 'Something went wrong.'); return; }
+
+      currentShortUrl = data.short_url;
+      document.getElementById('shortLink').textContent = data.short_url;
+      document.getElementById('shortLink').href        = data.short_url;
+      document.getElementById('shortId').textContent   = data.short_id;
+      document.getElementById('createdAt').textContent = new Date().toLocaleString();
+      document.getElementById('copyBtn').textContent   = 'Copy';
+      document.getElementById('copyBtn').classList.remove('copied');
+
+      result.classList.add('visible');
+      input.value = '';
+      loadRecent();
+    } catch (e) {
+      showError('Network error. Please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Shorten →';
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+
+  function copyLink() {
+    if (!currentShortUrl) return;
+    navigator.clipboard.writeText(currentShortUrl).then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+
+  async function loadRecent() {
+    try {
+      const res  = await fetch('/api/recent');
+      const rows = await res.json();
+      const list = document.getElementById('recentList');
+
+      if (!rows.length) {
+        list.innerHTML = '<div class="empty-state">No links yet. Shorten your first URL above!</div>';
+        return;
+      }
+
+      list.innerHTML = rows.map(r => `
+        <div class="recent-item">
+          <div class="recent-id">${r.short_id}</div>
+          <div class="recent-url" title="${r.long_url}">${r.long_url}</div>
+          <div class="recent-clicks">${r.clicks} clicks</div>
+        </div>
+      `).join('');
+    } catch (_) {}
+  }
+
+  // Allow Enter key
+  document.getElementById('urlInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') shortenUrl();
+  });
+
+  loadRecent();
+</script>
+</body>
+</html>
